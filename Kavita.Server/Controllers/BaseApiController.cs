@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 using Kavita.API.Services;
 using Kavita.API.Store;
 using Kavita.Common.Extensions;
+using Kavita.Services.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MimeTypes;
 
 namespace Kavita.Server.Controllers;
 
@@ -79,7 +79,7 @@ public class BaseApiController : ControllerBase
         Response.Headers.ETag = etag;
         Response.Headers.CacheControl = $"private, max-age={maxAge}, stale-while-revalidate={maxAge}";
 
-        var contentType = MimeTypeMap.GetMimeType(Path.GetExtension(path));
+        var contentType = MimeTypeHelper.GetMimeType(Path.GetExtension(path));
         return PhysicalFile(path, contentType, Path.GetFileName(path), enableRangeProcessing: true);
     }
 
@@ -92,7 +92,7 @@ public class BaseApiController : ControllerBase
     {
         if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return NotFound();
 
-        var contentType = MimeTypeMap.GetMimeType(Path.GetExtension(path));
+        var contentType = MimeTypeHelper.GetMimeType(Path.GetExtension(path));
         return PhysicalFile(path, contentType, Path.GetFileName(path), enableRangeProcessing: true);
     }
 

@@ -392,6 +392,10 @@ public class ArchiveServiceTests
     [InlineData(new [] {"001.jpg", "Chapter 20/cover.jpg", "Chapter 21/0001.jpg"}, "Test.zip", "Chapter 20/cover.jpg")]
     [InlineData(new [] {"._/001.jpg", "._/cover.jpg", "010.jpg"}, "Test.zip", "010.jpg")]
     [InlineData(new [] {"001.txt", "002.txt", "a.jpg"}, "Test.zip", "a.jpg")]
+    // JXL cannot be decoded for thumbnails, so it is skipped in favor of the next image
+    [InlineData(new [] {"001.jxl", "002.png"}, "Test.zip", "002.png")]
+    [InlineData(new [] {"001.jxl", "cover.jxl", "010.jpg"}, "Test.zip", "010.jpg")]
+    [InlineData(new [] {"001.jxl", "002.jxl"}, "Test.zip", null)]
     public void FindCoverImageFilename(string[] filenames, string archiveName, string expected)
     {
         Assert.Equal(expected, ArchiveService.FindCoverImageFilename(archiveName, filenames));

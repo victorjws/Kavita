@@ -29,7 +29,8 @@ public static partial class Parser
     public const int RegexTimeoutMs = 500;
     public static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(RegexTimeoutMs);
 
-    public const string ImageFileExtensions = @"(\.png|\.jpeg|\.jpg|\.webp|\.gif|\.avif)"; // Don't forget to update CoverChooser
+    // Don't forget to update CoverChooser. JXL is intentionally not accepted there (or in UploadController) as the server cannot decode it
+    public const string ImageFileExtensions = @"(\.png|\.jpeg|\.jpg|\.webp|\.gif|\.avif|\.jxl)";
     public const string ArchiveFileExtensions = @"\.cbz|\.zip|\.rar|\.cbr|\.tar.gz|\.7zip|\.7z|\.cb7|\.cbt";
     public const string EpubFileExtension = @"\.epub";
     public const string PdfFileExtension = @"\.pdf";
@@ -1050,6 +1051,14 @@ public static partial class Parser
     public static bool IsImage(string filePath)
     {
         return !filePath.StartsWith('.') && ImageRegex.IsMatch(Path.GetExtension(filePath));
+    }
+
+    /// <summary>
+    /// JPEG XL pages are served as is to the browser, the server has no decoder for them
+    /// </summary>
+    public static bool IsJxl(string filePath)
+    {
+        return Path.GetExtension(filePath).Equals(".jxl", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsXml(string filePath)

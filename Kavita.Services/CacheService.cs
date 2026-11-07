@@ -12,6 +12,7 @@ using Kavita.Common.Extensions;
 using Kavita.Models.DTOs.Reader;
 using Kavita.Models.Entities;
 using Kavita.Models.Entities.Enums;
+using Kavita.Services.Helpers;
 using Kavita.Services.Scanner;
 using Microsoft.Extensions.Logging;
 using NetVips;
@@ -60,6 +61,27 @@ public class CacheService(
             for (var i = 0; i < files.Length; i++)
             {
                 var file = files[i];
+
+                // NetVips has no JPEG XL loader, read the size from the file header instead
+                if (Parser.IsJxl(file))
+                {
+                    if (!JxlHeaderReader.TryGetDimensions(file, out var jxlWidth, out var jxlHeight))
+                    {
+                        logger.LogWarning("Unable to read the JPEG XL dimensions of {File}, skipping it", file);
+                        continue;
+                    }
+
+                    dimensions.Add(new FileDimensionDto()
+                    {
+                        PageNumber = i,
+                        Height = jxlHeight,
+                        Width = jxlWidth,
+                        IsWide = jxlWidth > jxlHeight,
+                        FileName = file.Replace(cachePath, string.Empty)
+                    });
+                    continue;
+                }
+
                 using var image = Image.NewFromFile(file, memory: false, access: Enums.Access.SequentialUnbuffered);
                 dimensions.Add(new FileDimensionDto()
                 {

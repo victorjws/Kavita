@@ -783,10 +783,12 @@ public class ReaderService(IUnitOfWork unitOfWork, ILogger<ReaderService> logger
 
             if (!Directory.Exists(outputDirectory))
             {
+                directoryService.ExistOrCreate(outputDirectory);
                 var outputtedThumbnails = cachedImages
                     .Select((img, idx) =>
-                        directoryService.FileSystem.Path.Join(outputDirectory,
-                            imageService.WriteCoverThumbnail(img, $"{idx}", outputDirectory, encodeFormat)))
+                        directoryService.FileSystem.Path.Join(outputDirectory, Parser.IsJxl(img)
+                            ? CopyJxlPage(img, $"{idx}", outputDirectory)
+                            : imageService.WriteCoverThumbnail(img, $"{idx}", outputDirectory, encodeFormat)))
                     .ToArray();
                 return CacheService.GetPageFromFiles(outputtedThumbnails, pageNum);
             }
@@ -801,6 +803,17 @@ public class ReaderService(IUnitOfWork unitOfWork, ILogger<ReaderService> logger
             directoryService.ClearAndDeleteDirectory(outputDirectory);
             throw;
         }
+    }
+
+    /// <summary>
+    /// JPEG XL cannot be decoded for a thumbnail, so the page is passed through for the browser to scale
+    /// </summary>
+    /// <returns>File name inside <paramref name="outputDirectory"/></returns>
+    private string CopyJxlPage(string sourceFile, string fileName, string outputDirectory)
+    {
+        var filename = fileName + directoryService.FileSystem.Path.GetExtension(sourceFile).ToLowerInvariant();
+        directoryService.FileSystem.File.Copy(sourceFile, directoryService.FileSystem.Path.Join(outputDirectory, filename), true);
+        return filename;
     }
 
     public async Task<RereadDto> CheckSeriesForReRead(int userId, int seriesId, int libraryId,

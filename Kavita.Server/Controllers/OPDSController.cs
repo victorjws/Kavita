@@ -17,9 +17,9 @@ using Kavita.Models.Entities.Enums;
 using Kavita.Server.Attributes;
 using Kavita.Services;
 using Kavita.Services.Extensions;
+using Kavita.Services.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using MimeTypes;
 
 namespace Kavita.Server.Controllers;
 
@@ -721,7 +721,7 @@ public class OpdsController(
                 }, userId, ct: HttpContext.RequestAborted);
             }
 
-            return CachedContent(content, MimeTypeMap.GetMimeType(format));
+            return CachedContent(content, MimeTypeHelper.GetMimeType(format));
         }
         catch (Exception)
         {
@@ -741,6 +741,6 @@ public class OpdsController(
         var content = await directoryService.ReadFileAsync(path);
         var format = Path.GetExtension(path);
 
-        return File(content, MimeTypeMap.GetMimeType(format));
+        return File(content, MimeTypeHelper.GetMimeType(format));
     }
 }

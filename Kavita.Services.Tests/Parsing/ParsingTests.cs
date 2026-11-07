@@ -261,9 +261,24 @@ public class ParsingTests
     [InlineData("!test.jpg", true)]
     [InlineData("test.webp", true)]
     [InlineData("test.gif", true)]
+    [InlineData("test.jxl", true)]
+    [InlineData("TEST.JXL", true)]
+    [InlineData(".test.jxl", false)]
     public void IsImageTest(string filename, bool expected)
     {
         Assert.Equal(expected, IsImage(filename));
+    }
+
+    [Theory]
+    [InlineData("test.jxl", true)]
+    [InlineData("TEST.JXL", true)]
+    [InlineData("Chapter 1/001.jxl", true)]
+    [InlineData("test.jpg", false)]
+    [InlineData("test.jxl.txt", false)]
+    [InlineData("jxl", false)]
+    public void IsJxlTest(string filename, bool expected)
+    {
+        Assert.Equal(expected, IsJxl(filename));
     }
 
 
