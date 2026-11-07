@@ -1,0 +1,8 @@
+# Used only by Dockerfile.local. Keeps host build output out of the context so the image always builds from source.
+**/bin
+**/obj
+**/node_modules
+UI/Web/dist
+UI/Web/.angular
+.git
+_output

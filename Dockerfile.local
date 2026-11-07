@@ -1,0 +1,84 @@
+# Builds Kavita from source, so only Docker is needed (the main Dockerfile packages prebuilt CI output instead).
+#
+#   docker build -f Dockerfile.local -t kavita:local .
+#   docker buildx build -f Dockerfile.local --platform linux/amd64 -t kavita:local --load .
+#
+# Supports linux/amd64, linux/arm64 and linux/arm/v7. The UI and server are built natively on the build host and the
+# server is cross-published for the target, so no emulation is needed except for the final apt-get layer.
+
+FROM --platform=$BUILDPLATFORM node:24-slim AS ui
+
+WORKDIR /src/UI/Web
+COPY UI/Web/package.json UI/Web/package-lock.json ./
+RUN npm ci --legacy-peer-deps
+
+COPY UI/Web/ ./
+RUN npm run prod
+
+
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+WORKDIR /src
+COPY global.json favicon.ico ./
+COPY Kavita.API/ Kavita.API/
+COPY Kavita.Common/ Kavita.Common/
+COPY Kavita.Database/ Kavita.Database/
+COPY Kavita.Models/ Kavita.Models/
+COPY Kavita.Services/ Kavita.Services/
+COPY Kavita.Server/ Kavita.Server/
+
+# Same layout and file set as the release packaging (local-release.yml)
+RUN set -eux; \
+    case "${TARGETARCH}${TARGETVARIANT}" in \
+      "amd64")  RID=linux-x64;   KEPUBIFY=kepubify-linux-64bit; KEPUBIFY_SHA=37d7628d26c5c906f607f24b36f781f306075e7073a6fe7820a751bb60431fc5 ;; \
+      "arm64")  RID=linux-arm64; KEPUBIFY=kepubify-linux-arm64; KEPUBIFY_SHA=5a15b8f6f6a96216c69330601bca29638cfee50f7bf48712795cff88ae2d03a3 ;; \
+      "armv7")  RID=linux-arm;   KEPUBIFY=kepubify-linux-arm;   KEPUBIFY_SHA=07f23275c4e674093443f01a591aa0980b0b87dbb0a10986d5001e9d56b0e1e7 ;; \
+      *) echo "Unsupported platform: ${TARGETARCH}${TARGETVARIANT}" >&2; exit 1 ;; \
+    esac; \
+    dotnet publish Kavita.Server/Kavita.Server.csproj -c Release -r "$RID" --self-contained true -o /Kavita; \
+    mv /Kavita/Kavita.Server /Kavita/Kavita; \
+    mkdir -p /Kavita/config; \
+    cp Kavita.Server/config/appsettings.json /Kavita/config/appsettings-init.json; \
+    rm -rf /Kavita/BuildHost-net472 /Kavita/BuildHost-netcore /Kavita/bin /Kavita/config/cache-long; \
+    curl -fsSL -o /Kavita/kepubify "https://github.com/pgaskin/kepubify/releases/download/v4.0.4/${KEPUBIFY}"; \
+    echo "${KEPUBIFY_SHA}  /Kavita/kepubify" | sha256sum -c -; \
+    chmod +x /Kavita/kepubify
+
+COPY INSTALL.txt /Kavita/README.txt
+COPY LICENSE /Kavita/LICENSE.txt
+RUN rm -rf /Kavita/wwwroot
+COPY --from=ui /src/UI/Web/dist/browser /Kavita/wwwroot
+
+
+#Production image (keep in sync with Dockerfile)
+FROM ubuntu:noble
+
+#Installs program dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+  && apt-get install -y libicu-dev libgdiplus curl tzdata libjemalloc2 \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /Kavita /kavita
+COPY Kavita.Server/config/appsettings.json /tmp/config/appsettings.json
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 5000
+
+WORKDIR /kavita
+
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 CMD curl -fsS http://localhost:5000/api/health || exit 1
+
+# Enable detection of running in a container
+ENV DOTNET_RUNNING_IN_CONTAINER=true
+# Set the time zone
+ENV TZ=UTC
+
+ENTRYPOINT [ "/bin/bash" ]
+CMD ["/entrypoint.sh"]
