@@ -274,6 +274,41 @@ public class JxlHeaderReaderTests
 
     #endregion
 
+    #region Signature
+
+    [Theory]
+    [InlineData("bare-64x48.jxl", true)]
+    [InlineData("container-100x75.jxl", true)]
+    [InlineData("page-16x16.png", false)]
+    public void HasJxlSignature_Fixtures(string file, bool expected)
+    {
+        using var stream = File.OpenRead(Path.Join(TestDirectory, file));
+
+        Assert.Equal(expected, JxlHeaderReader.HasJxlSignature(stream));
+    }
+
+    [Fact]
+    public void HasJxlSignature_RestoresPosition()
+    {
+        using var stream = new MemoryStream(Codestream(10, 10));
+        stream.Position = 0;
+
+        Assert.True(JxlHeaderReader.HasJxlSignature(stream));
+        Assert.Equal(0, stream.Position);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void HasJxlSignature_ShortOrEmpty_ReturnsFalse(int length)
+    {
+        using var stream = new MemoryStream(new byte[length]);
+
+        Assert.False(JxlHeaderReader.HasJxlSignature(stream));
+    }
+
+    #endregion
+
     #region Invalid input
 
     [Fact]

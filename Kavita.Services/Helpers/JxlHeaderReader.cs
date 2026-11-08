@@ -26,6 +26,34 @@ public static class JxlHeaderReader
         [(1, 1), (12, 10), (4, 3), (3, 2), (16, 9), (5, 4), (2, 1)];
 
     /// <summary>
+    /// Whether the stream starts with a JPEG XL codestream or container signature. Restores the position of the stream.
+    /// </summary>
+    /// <remarks>The stream must be seekable, otherwise this is false</remarks>
+    public static bool HasJxlSignature(Stream stream)
+    {
+        if (!stream.CanSeek) return false;
+
+        var position = stream.Position;
+        try
+        {
+            stream.Position = 0;
+            Span<byte> start = stackalloc byte[ContainerSignature.Length];
+            var read = stream.Read(start);
+
+            if (read >= CodestreamSignature.Length && start[..CodestreamSignature.Length].SequenceEqual(CodestreamSignature))
+            {
+                return true;
+            }
+
+            return read == ContainerSignature.Length && start.SequenceEqual(ContainerSignature);
+        }
+        finally
+        {
+            stream.Position = position;
+        }
+    }
+
+    /// <summary>
     /// Width/Height as displayed, so with EXIF orientations 5-8 (transposed/rotated 90) they are swapped
     /// </summary>
     /// <returns>False if the file is missing, not JPEG XL, or the header is malformed</returns>

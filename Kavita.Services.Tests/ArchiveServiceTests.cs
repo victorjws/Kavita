@@ -5,6 +5,7 @@ using System.IO.Compression;
 using Kavita.API.Services;
 using Kavita.Models.DTOs.Archive;
 using Kavita.Models.Entities.Enums;
+using Kavita.Services.Helpers;
 using Kavita.Services.Scanner;
 using Microsoft.Extensions.Logging;
 using NetVips;
@@ -392,13 +393,54 @@ public class ArchiveServiceTests
     [InlineData(new [] {"001.jpg", "Chapter 20/cover.jpg", "Chapter 21/0001.jpg"}, "Test.zip", "Chapter 20/cover.jpg")]
     [InlineData(new [] {"._/001.jpg", "._/cover.jpg", "010.jpg"}, "Test.zip", "010.jpg")]
     [InlineData(new [] {"001.txt", "002.txt", "a.jpg"}, "Test.zip", "a.jpg")]
-    // JXL cannot be decoded for thumbnails, so it is skipped in favor of the next image
-    [InlineData(new [] {"001.jxl", "002.png"}, "Test.zip", "002.png")]
-    [InlineData(new [] {"001.jxl", "cover.jxl", "010.jpg"}, "Test.zip", "010.jpg")]
-    [InlineData(new [] {"001.jxl", "002.jxl"}, "Test.zip", null)]
+    // JXL covers are decoded by default
+    [InlineData(new [] {"001.jxl", "002.png"}, "Test.zip", "001.jxl")]
+    [InlineData(new [] {"001.jxl", "cover.jxl", "010.jpg"}, "Test.zip", "cover.jxl")]
+    [InlineData(new [] {"001.jxl", "002.jxl"}, "Test.zip", "001.jxl")]
     public void FindCoverImageFilename(string[] filenames, string archiveName, string expected)
     {
         Assert.Equal(expected, ArchiveService.FindCoverImageFilename(archiveName, filenames));
+    }
+
+    // Platforms without a JXL decoder skip JXL in favor of the next image
+    [Theory]
+    [InlineData(new [] {"001.jxl", "002.png"}, "Test.zip", "002.png")]
+    [InlineData(new [] {"001.jxl", "cover.jxl", "010.jpg"}, "Test.zip", "010.jpg")]
+    [InlineData(new [] {"001.jxl", "002.jxl"}, "Test.zip", null)]
+    [InlineData(new [] {"001.jpg", "002.jpg"}, "Test.zip", "001.jpg")]
+    public void FindCoverImageFilename_SkipJxl(string[] filenames, string archiveName, string expected)
+    {
+        Assert.Equal(expected, ArchiveService.FindCoverImageFilename(archiveName, filenames, skipJxl: true));
+    }
+
+    [Fact]
+    public void GetCoverImage_ArchiveWithJxlFirstPage_WritesCover()
+    {
+        if (!JxlDecoder.IsSupported) return;
+
+        var directory = Path.Join(Path.GetTempPath(), $"kavita-jxl-archive-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var fixtures = Path.Join(Directory.GetCurrentDirectory(), "../../../Test Data/JxlHeaderReader");
+            var archivePath = Path.Join(directory, "Test v01.cbz");
+            using (var zip = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                zip.CreateEntryFromFile(Path.Join(fixtures, "cover-800x1200.jxl"), "001.jxl");
+                zip.CreateEntryFromFile(Path.Join(fixtures, "page-16x16.png"), "002.png");
+            }
+
+            var result = _archiveService.GetCoverImage(archivePath, "cover", directory, EncodeFormat.WEBP);
+
+            Assert.Equal("cover.webp", result);
+            using var cover = NetVips.Image.NewFromFile(Path.Join(directory, result));
+            // Taken from the 800x1200 JXL page, not the 16x16 PNG
+            Assert.True(cover.Width > 16 && cover.Height > 16, $"Cover was {cover.Width}x{cover.Height}");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
     }
 
 

@@ -13,6 +13,7 @@ using Kavita.Models.DTOs;
 using Kavita.Models.Entities.Enums;
 using Kavita.Models.Entities.Interfaces;
 using Kavita.Models.Extensions;
+using Kavita.Services.Helpers;
 using Kavita.Services.Scanner;
 using Microsoft.Extensions.Logging;
 using NetVips;
@@ -138,6 +139,13 @@ public class ImageService(ILogger<ImageService> logger, IDirectoryService direct
 
         try
         {
+            // NetVips has no JPEG XL loader, decode to PNG first
+            if (Parser.IsJxl(path))
+            {
+                using var decoded = new MemoryStream(JxlDecoder.DecodeToPng(path));
+                return WriteCoverThumbnailCore(decoded, fileName, outputDirectory, encodeFormat, size);
+            }
+
             var (width, height) = size.GetDimensions();
             using var sourceImage = Image.NewFromFile(path, false, Enums.Access.SequentialUnbuffered);
 
@@ -166,6 +174,37 @@ public class ImageService(ILogger<ImageService> logger, IDirectoryService direct
     /// <param name="encodeFormat">Export the file as the passed encoding</param>
     /// <returns>File name with extension of the file. This will always write to <see cref="DirectoryService.CoverImageDirectory"/></returns>
     public string WriteCoverThumbnail(Stream stream, string fileName, string outputDirectory, EncodeFormat encodeFormat, CoverImageSize size = CoverImageSize.Default)
+    {
+        MemoryStream? buffered = null;
+        try
+        {
+            // Archive entries are forward only, so buffer them to be able to look at the signature
+            if (!stream.CanSeek)
+            {
+                buffered = new MemoryStream();
+                stream.CopyTo(buffered);
+                stream = buffered;
+            }
+
+            // NetVips has no JPEG XL loader, decode to PNG first
+            if (JxlHeaderReader.HasJxlSignature(stream))
+            {
+                stream.Position = 0;
+                var png = JxlDecoder.DecodeToPng(stream);
+                buffered?.Dispose();
+                buffered = new MemoryStream(png);
+                stream = buffered;
+            }
+
+            return WriteCoverThumbnailCore(stream, fileName, outputDirectory, encodeFormat, size);
+        }
+        finally
+        {
+            buffered?.Dispose();
+        }
+    }
+
+    private string WriteCoverThumbnailCore(Stream stream, string fileName, string outputDirectory, EncodeFormat encodeFormat, CoverImageSize size)
     {
         var (targetWidth, targetHeight) = size.GetDimensions();
         if (stream.CanSeek) stream.Position = 0;
